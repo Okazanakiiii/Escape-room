@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Escape Room: Bilik Rahsia</title>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+/* =====================================================================
+   1) TAMPAL CONFIG FIREBASE ANDA DI SINI (dari Project settings → Your apps)
+   ===================================================================== */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyD1ft_vHJlCV0U-2kxGtoYtMJ8liagtN6w",
+  authDomain: "escape-room-c1df5.firebaseapp.com",
+  databaseURL: "https://escape-room-c1df5-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "escape-room-c1df5",
+  storageBucket: "escape-room-c1df5.firebasestorage.app",
+  messagingSenderId: "326147418018",
+  appId: "1:326147418018:web:35a2d7c732bb7c5e09b4fb"
+};
+
+/* =====================================================================
+   2) KATA LALUAN — tukar ikut suka
+   ===================================================================== */
+const ADMIN_PASSWORD = "admin2026";
+const GROUPS = [
+  { name: "Kumpulan 1", password: "HARIMAU1" },
+  { name: "Kumpulan 2", password: "GAJAH2" },
+  { name: "Kumpulan 3", password: "HELANG3" },
+  { name: "Kumpulan 4", password: "BADAK4" },
+  { name: "Kumpulan 5", password: "BURUNG5" },
+  { name: "Kumpulan 6", password: "SERIGALA6" }
+];
+
+/* =====================================================================
+   3) SOALAN AWAL (admin boleh edit terus dalam tab "Soalan")
+   ===================================================================== */
+const DEFAULT_QUIZ = {
+  title: "Bilik Rahsia",
+  timeLimitMin: 20,
+  wrongPenaltySec: 30,
+  hintPenaltySec: 60,
+  shuffleRooms: true,
+  rooms: [
+    { name:"Bilik Perpustakaan", story:"Pintu terkunci. Di atas meja ada nota lama…",
+      type:"mcq", q:"Hukum Ohm menyatakan V = I × R. Jika I = 2 A dan R = 5 Ω, berapakah V?",
+      options:["2.5 V","7 V","10 V","25 V"], answer:"10 V", hint:"Darabkan arus dengan rintangan." },
+    { name:"Bilik Jam", story:"Semua jam berhenti pada waktu yang sama…",
+      type:"text", q:"Saya ada tangan tetapi tidak boleh bertepuk. Saya ada muka tetapi tiada mata. Siapakah saya?",
+      answer:["jam","jam dinding"], hint:"Lihat di dinding bilik ini." },
+    { name:"Makmal Rahsia", story:"Sebuah peti besi dengan papan kekunci nombor…",
+      type:"text", q:"Teruskan siri ini: 2, 6, 12, 20, 30, ?",
+      answer:["42"], hint:"Beza antara nombor: 4, 6, 8, 10…" },
+    { name:"Bilik Peta", story:"Peta dunia terbentang di lantai…",
+      type:"mcq", q:"Negeri manakah di Malaysia yang digelar 'Negeri Di Bawah Bayu'?",
+      options:["Sarawak","Sabah","Pahang","Kelantan"], answer:"Sabah", hint:"Ia terletak di Borneo, dengan Gunung Kinabalu." },
+    { name:"Bilik Kod", story:"Skrin komputer berkelip dengan nombor binari…",
+      type:"mcq", q:"Nombor binari 1011 bersamaan dengan nombor perpuluhan berapa?",
+      options:["9","10","11","13"], answer:"11", hint:"8 + 0 + 2 + 1" }
+  ]
+};
+</script>
+<style>
+:root{--bg:#0e0d0b;--panel:#1a1814;--line:#3a342a;--gold:#e0b84f;--txt:#ece6d8;--dim:#9a9180;--ok:#5fc27a;--bad:#e05a4f}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at 50% 0,#2a2418 0,var(--bg) 60%) fixed;color:var(--txt);font-family:Inter,sans-serif;min-height:100vh}
+h1,h2,h3,.mono{font-family:'Special Elite',monospace;letter-spacing:.5px}
+.wrap{max-width:1000px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+header h1{margin:0;color:var(--gold);font-size:26px}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:#26221b;color:var(--txt);padding:10px 14px;font-weight:600}
+button:hover{border-color:var(--gold)}
+button.pri{background:var(--gold);color:#1a1408;border-color:var(--gold)}
+button.ghost{background:transparent}
+button.red{background:var(--bad);border-color:var(--bad);color:#fff}
+button.sm{padding:6px 10px;font-size:13px}
+button:disabled{opacity:.4;cursor:not-allowed}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;position:relative;overflow:hidden}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;margin-top:16px}
+.stripe{position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--c)}
+.locks{display:flex;gap:6px;margin:10px 0;flex-wrap:wrap}
+.lock{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);display:grid;place-items:center;font-size:14px}
+.lock.on{background:var(--c,var(--gold));color:#111;border-color:transparent;font-weight:800}
+.small{font-size:13px;color:var(--dim)}
+.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:12px;font-weight:700;background:#2c271f}
+.tag.win{background:var(--ok);color:#06210f}.tag.bad{background:var(--bad);color:#fff}.tag.go{background:var(--gold);color:#1a1408}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.spread{justify-content:space-between}
+.timer{font-family:'Special Elite',monospace;font-size:30px;color:var(--gold)}
+.low{color:var(--bad)!important;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.4}}
+.rooms{display:grid;grid-template-columns:repeat(auto-fit,minmax(56px,1fr));gap:8px;margin:16px 0}
+.room{padding:10px 4px;text-align:center;border-radius:12px;border:1px solid var(--line);background:var(--panel);font-size:12px}
+.room b{display:block;font-size:20px;font-family:'Special Elite',monospace}
+.room.done{border-color:var(--ok);color:var(--ok)}
+.room.cur{border-color:var(--gold);box-shadow:0 0 0 2px #e0b84f44}
+.q{font-size:20px;line-height:1.5;margin:6px 0 16px}
+.opts{display:grid;gap:10px}
+.opt{text-align:left;padding:14px 16px;font-weight:500}
+input[type=text],input[type=password],textarea{width:100%;font:inherit;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#0f0e0c;color:var(--txt)}
+textarea{min-height:380px;font-family:ui-monospace,monospace;font-size:12.5px}
+.msg{min-height:24px;margin-top:12px;font-weight:600}
+.msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}
+.hint{margin-top:12px;padding:12px;border-left:3px solid var(--gold);background:#231f17;border-radius:6px}
+.code{display:flex;gap:8px;justify-content:center;margin:12px 0;flex-wrap:wrap}
+.code span{width:48px;height:60px;border-radius:12px;border:2px dashed var(--line);display:grid;place-items:center;font-size:30px;font-family:'Special Elite',monospace;color:var(--gold)}
+.code span.got{border-style:solid;border-color:var(--gold)}
+.dial{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.dial input{width:52px;height:64px;text-align:center;font-size:30px;font-family:'Special Elite',monospace;padding:0}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}
+th{color:var(--dim);font-weight:600}
+.shake{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.center{text-align:center}
+.big{font-size:56px;margin:0}
+.login{max-width:380px;margin:12vh auto 0}
+.tabs{display:flex;gap:6px;margin:16px 0 0;flex-wrap:wrap}
+.tabs button.on{background:var(--gold);color:#1a1408;border-color:var(--gold)}
+.overlay{position:fixed;inset:0;background:#000d;display:grid;place-items:center;z-index:20;text-align:center;padding:20px}
+.overlay .n{font-size:140px;font-family:'Special Elite',monospace;color:var(--gold);line-height:1}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--bad);margin-right:6px}
+.dot.on{background:var(--ok)}
+.board td{font-size:20px;padding:14px 10px}
+.modal{position:fixed;inset:0;background:#000b;display:grid;place-items:center;padding:16px;z-index:30}
+.modal .card{max-width:420px;width:100%}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div id="ov"></div>
+<div class="modal hidden" id="modal"><div class="card" id="modalBox"></div></div>
+
+<script>
+const COLORS=["#e05a4f","#e0b84f","#5fc27a","#4fa3e0","#b07be0","#e07bb8","#4fd0c4","#e0904f"];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const norm=s=>String(s).trim().toLowerCase().replace(/\s+/g," ");
+const fmt=sec=>{sec=Math.max(0,Math.ceil(sec));return String(Math.floor(sec/60)).padStart(2,"0")+":"+String(sec%60).padStart(2,"0");};
+const color=i=>COLORS[i%COLORS.length];
+const arr=x=>Array.isArray(x)?x:(x&&typeof x==="object"?Object.keys(x).sort((a,b)=>a-b).map(k=>x[k]):[]);
+const SKEY="escapeRoom_session";
+
+let D={}, ROOT=null, offset=0, connected=false;
+let session=(()=>{try{return JSON.parse(localStorage.getItem(SKEY))}catch(e){return null}})();
+let tab="dash", flash=null, lastSig="";
+
+/* ---------- Setup check ---------- */
+if(FIREBASE_CONFIG.apiKey.includes("PASTE")){
+  document.getElementById("app").innerHTML=`<div class="card login"><h2 style="margin-top:0;color:var(--gold)">⚙️ Belum setup</h2>
+  <p>Tampal config Firebase anda dalam bahagian <b>FIREBASE_CONFIG</b> di atas fail <code>index.html</code>, kemudian upload semula.</p></div>`;
+  throw new Error("Firebase not configured");
+}
+firebase.initializeApp(FIREBASE_CONFIG);
+const db=firebase.database();
+ROOT=db.ref("escapeRoom");
+db.ref(".info/serverTimeOffset").on("value",s=>{offset=s.val()||0;});
+db.ref(".info/connected").on("value",s=>{connected=!!s.val();const d=$("#conn");if(d)d.className="dot"+(connected?" on":"");});
+ROOT.on("value",s=>{D=s.val()||{};maybeRender();},e=>{$("#app").innerHTML=`<div class="card login"><h3>❌ Tak dapat sambung ke database</h3><p class="small">${esc(e.message)}</p><p class="small">Semak Rules Realtime Database (read/write = true).</p></div>`;});
+
+/* ---------- Data helpers ---------- */
+const now=()=>Date.now()+offset;
+const quiz=()=>D.quiz||DEFAULT_QUIZ;
+const rooms=()=>arr(quiz().rooms);
+const game=()=>D.game||{state:"waiting"};
+const teams=()=>arr(D.teams);
+function gameElapsed(){
+  const g=game(); if(!g.startAt||g.state==="waiting") return 0;
+  const ref=g.state==="paused"?g.pausedAt:g.state==="ended"?g.endedAt:now();
+  return Math.max(0,(ref-g.startAt-(g.pausedTotal||0))/1000);
+}
+function teamTime(t){ return t.finishSec!=null?t.finishSec:gameElapsed()+(t.penalty||0)-(t.bonus||0); }
+function remaining(t){ return quiz().timeLimitMin*60-teamTime(t); }
+function makeTeams(){
+  const n=rooms().length, sh=quiz().shuffleRooms;
+  return GROUPS.map((g,i)=>{
+    let order=[...Array(n).keys()];
+    if(sh){ const k=i%n; order=order.slice(k).concat(order.slice(0,k)); if(i>=n) order.reverse(); }
+    return {name:g.name,order,code:Array.from({length:n},()=>Math.floor(Math.random()*10)),solved:0,wrong:0,hints:0,penalty:0,bonus:0,hintShown:false,status:"playing"};
+  });
+}
+function upd(i,obj){ return ROOT.child("teams/"+i).update(obj); }
+function rank(){
+  return teams().map((t,i)=>({t,i})).sort((a,b)=>{
+    const ea=a.t.status==="escaped",eb=b.t.status==="escaped";
+    if(ea!==eb) return eb-ea;
+    if(ea) return a.t.finishSec-b.t.finishSec;
+    if(b.t.solved!==a.t.solved) return b.t.solved-a.t.solved;
+    return teamTime(a.t)-teamTime(b.t);
+  });
+}
+function badge(t){
+  const g=game().state;
+  if(t.status==="escaped") return '<span class="tag win">BERJAYA KELUAR</span>';
+  if(t.status==="timeout") return '<span class="tag bad">Masa tamat</span>';
+  if(g==="waiting") return '<span class="tag">Menunggu</span>';
+  if(g==="paused") return '<span class="tag">Dijeda</span>';
+  if(g==="ended") return '<span class="tag bad">Tamat</span>';
+  return '<span class="tag go">Sedang main</span>';
+}
+
+/* ---------- Render control ---------- */
+function sig(){
+  if(!session) return "login";
+  if(session.role==="board") return "board|"+JSON.stringify([D.game,D.teams]);
+  if(session.role==="admin") return "admin|"+tab+"|"+(tab==="quiz"?"":JSON.stringify([D.game,D.teams,D.quiz]));
+  return "team|"+JSON.stringify([D.game,(D.teams||{})[session.g],D.quiz]);
+}
+function maybeRender(force){ const s=sig(); if(force||s!==lastSig){ lastSig=s; render(); } }
+function render(){
+  if(!session) return login();
+  if(session.role==="admin") return admin();
+  if(session.role==="board") return board();
+  return team();
+}
+function setSession(s){ session=s; try{ s?localStorage.setItem(SKEY,JSON.stringify(s)):localStorage.removeItem(SKEY);}catch(e){} maybeRender(true); }
+function logout(){ setSession(null); }
+
+/* ---------- Login ---------- */
+function login(){
+  $("#app").innerHTML=`<div class="login">
+    <h1 class="center" style="color:var(--gold);font-size:34px;margin-bottom:4px">🔐 ${esc(quiz().title)}</h1>
+    <p class="center small">Escape Room · masukkan kata laluan kumpulan</p>
+    <form class="card" onsubmit="event.preventDefault();doLogin()">
+      <input type="password" id="pw" placeholder="Kata laluan" autocomplete="off" autofocus>
+      <div class="msg bad" id="msg"></div>
+      <button class="pri" style="width:100%">Masuk</button>
+    </form>
+    <p class="center"><button class="ghost sm" onclick="setSession({role:'board'})">📺 Papan kedudukan</button></p>
+  </div>`;
+}
+function doLogin(){
+  const v=$("#pw").value.trim();
+  if(v===ADMIN_PASSWORD){
+    if(!D.quiz) ROOT.update({quiz:DEFAULT_QUIZ});
+    if(!D.teams){ ROOT.update({teams:makeTeams(),game:{state:"waiting"}}); }
+    return setSession({role:"admin"});
+  }
+  const i=GROUPS.findIndex(g=>norm(g.password)===norm(v));
+  if(i<0){ $("#msg").textContent="❌ Kata laluan salah"; return; }
+  setSession({role:"team",g:i});
+}
+
+/* ---------- Team view ---------- */
+function team(){
+  const i=session.g, t=teams()[i], c=color(i), g=game(), R=rooms(), n=R.length;
+  if(!t){ $("#app").innerHTML=`<div class="card login center"><p>Permainan belum disediakan oleh admin.</p><button class="ghost" onclick="logout()">Log keluar</button></div>`; return; }
+  const order=arr(t.order), code=arr(t.code);
+  let body="";
+  if(t.status==="escaped"){
+    body=`<div class="card center"><p class="big">🎉</p><h2>Tahniah, ${esc(t.name)}!</h2><p>Anda berjaya keluar dalam <b class="mono">${fmt(t.finishSec)}</b></p><p class="small">Salah: ${t.wrong} · Petunjuk: ${t.hints}</p><p>Kedudukan: <b>#${rank().findIndex(r=>r.i===i)+1}</b></p></div>`;
+  } else if(t.status==="timeout"||g.state==="ended"){
+    body=`<div class="card center"><p class="big">⌛</p><h2>Permainan tamat</h2><p>${esc(t.name)} berjaya buka ${t.solved}/${n} bilik.</p></div>`;
+  } else if(g.state==="waiting"){
+    body=`<div class="card center"><p class="big">⏳</p><h2>Tunggu arahan fasilitator…</h2><p class="small">Permainan akan bermula serentak untuk semua kumpulan.</p></div>`;
+  } else if(t.solved>=n){
+    body=`<div class="card center"><h2 style="margin-top:0">🔐 Pintu Keluar</h2>
+      <p>Masukkan kod ${n} digit yang anda kumpul (Bilik 1 → ${n}).</p>
+      <div class="dial" id="dial">${code.map((_,k)=>`<input type="text" inputmode="numeric" maxlength="1">`).join("")}</div>
+      <div class="msg" id="msg"></div><button class="pri" style="margin-top:10px" onclick="tryCode()">Buka pintu</button></div>`;
+  } else {
+    const Q=R[order[t.solved]];
+    const input=Q.type==="mcq"
+      ? `<div class="opts">${arr(Q.options).map(o=>`<button class="opt" data-v="${esc(o)}" onclick="answer(this.dataset.v)">${esc(o)}</button>`).join("")}</div>`
+      : `<form class="row" onsubmit="event.preventDefault();answer($('#ans').value)"><input type="text" id="ans" placeholder="Taip jawapan…" autocomplete="off" style="flex:1"><button class="pri">Hantar</button></form>`;
+    body=`<div class="card" id="qcard">
+      <div class="small mono">BILIK ${t.solved+1} / ${n} — ${esc(Q.name)}</div>
+      ${Q.story?`<p class="small" style="font-style:italic">${esc(Q.story)}</p>`:""}
+      <div class="q">${esc(Q.q)}</div>${input}
+      <div class="msg" id="msg"></div>
+      ${Q.hint?(t.hintShown?`<div class="hint">💡 ${esc(Q.hint)}</div>`:`<div class="row" style="margin-top:12px"><button class="ghost" onclick="showHint()">💡 Petunjuk (+${quiz().hintPenaltySec}s)</button></div>`):""}
+    </div>`;
+  }
+  $("#app").innerHTML=`
+    <header><div class="row"><span id="conn" class="dot${connected?" on":""}"></span><h2 style="margin:0;color:${c}">${esc(t.name)}</h2></div>
+    <div class="row"><div class="timer" data-time="${i}">${fmt(remaining(t))}</div><button class="ghost sm" onclick="logout()">Keluar</button></div></header>
+    <div class="rooms">${order.map((_,k)=>`<div class="room ${k<t.solved?'done':''} ${k===t.solved&&t.status==='playing'?'cur':''}"><b>${k<t.solved?code[k]:(k===t.solved?'?':'🔒')}</b>Bilik ${k+1}</div>`).join("")}</div>
+    <div class="code">${code.map((d,k)=>`<span class="${k<t.solved?'got':''}">${k<t.solved?d:''}</span>`).join("")}</div>${body}`;
+  if(flash&&flash.until>Date.now()&&$("#msg")){ $("#msg").className="msg "+flash.cls; $("#msg").textContent=flash.text; }
+  const a=$("#ans"); if(a) a.focus();
+  const dial=$("#dial");
+  if(dial){ const ins=[...dial.querySelectorAll("input")]; ins[0].focus();
+    ins.forEach((el,k)=>{ el.addEventListener("input",()=>{el.value=el.value.replace(/\D/g,"");if(el.value&&ins[k+1])ins[k+1].focus();});
+      el.addEventListener("keydown",e=>{if(e.key==="Backspace"&&!el.value&&ins[k-1])ins[k-1].focus();if(e.key==="Enter")tryCode();}); }); }
+}
+function myTeam(){ return teams()[session.g]; }
+function canPlay(){ const t=myTeam(),g=game(); return t&&t.status==="playing"&&g.state==="running"&&now()>=g.startAt; }
+function shake(sel){ const q=$(sel); if(q){q.classList.remove("shake");void q.offsetWidth;q.classList.add("shake");} }
+function answer(v){
+  if(!canPlay()) return;
+  const t=myTeam(), Q=rooms()[arr(t.order)[t.solved]];
+  const ok=(Array.isArray(Q.answer)?Q.answer:[Q.answer]).map(norm).includes(norm(v));
+  if(ok){
+    flash={cls:"ok",text:`✅ Betul! Digit kod: ${arr(t.code)[t.solved]} — bilik seterusnya dibuka`,until:Date.now()+3000};
+    upd(session.g,{solved:t.solved+1,hintShown:false});
+  } else {
+    upd(session.g,{wrong:(t.wrong||0)+1,penalty:(t.penalty||0)+quiz().wrongPenaltySec});
+    const m=$("#msg"); m.className="msg bad"; m.textContent=`❌ Salah! +${quiz().wrongPenaltySec}s penalti`;
+    shake("#qcard"); const a=$("#ans"); if(a){a.value="";a.focus();}
+  }
+}
+function showHint(){ if(!canPlay()) return; const t=myTeam(); if(t.hintShown) return;
+  upd(session.g,{hintShown:true,hints:(t.hints||0)+1,penalty:(t.penalty||0)+quiz().hintPenaltySec}); }
+function tryCode(){
+  if(!canPlay()) return; const t=myTeam();
+  const v=[...document.querySelectorAll("#dial input")].map(e=>e.value).join("");
+  if(v===arr(t.code).join("")) upd(session.g,{status:"escaped",finishSec:Math.round(teamTime(t))});
+  else { upd(session.g,{wrong:(t.wrong||0)+1,penalty:(t.penalty||0)+quiz().wrongPenaltySec});
+    const m=$("#msg"); m.className="msg bad"; m.textContent=`❌ Kod salah! +${quiz().wrongPenaltySec}s`; shake("#dial"); }
+}
+
+/* ---------- Admin view ---------- */
+function admin(){
+  const g=game(), T=teams(), n=rooms().length;
+  const ctrl={
+    waiting:`<button class="pri" onclick="startAll()">▶ Mula serentak</button>`,
+    running:`<button onclick="pauseAll()">⏸ Jeda</button><button class="red" onclick="ask('Tamatkan permainan untuk semua kumpulan?','endAll()')">⏹ Tamat</button>`,
+    paused:`<button class="pri" onclick="resumeAll()">▶ Sambung</button><button class="red" onclick="ask('Tamatkan permainan untuk semua kumpulan?','endAll()')">⏹ Tamat</button>`,
+    ended:``
+  }[g.state]||"";
+  let body="";
+  if(tab==="dash"){
+    body=`<div class="card" style="margin-top:16px"><div class="row spread">
+      <div><div class="small">Status permainan</div><b style="font-size:20px">${{waiting:"Menunggu",running:"Sedang berjalan",paused:"Dijeda",ended:"Tamat"}[g.state]}</b></div>
+      <div class="center"><div class="small">Masa berlalu</div><div class="timer" data-gtime>${fmt(gameElapsed())}</div></div>
+      <div class="row">${ctrl}<button class="ghost" onclick="ask('Reset SEMUA kumpulan? Kemajuan dipadam dan kod baru dijana.','resetAll()')">🔄 Reset semua</button></div></div></div>
+    <div class="grid">${T.map((t,i)=>{const code=arr(t.code);return `<div class="card" style="--c:${color(i)}"><div class="stripe"></div>
+      <div class="row spread"><h3 style="margin:0;color:${color(i)}">${esc(t.name)}</h3>${badge(t)}</div>
+      <div class="small">Kata laluan: <b class="mono">${esc(GROUPS[i]?.password)}</b> · Kod: <b class="mono">${code.join("")}</b></div>
+      <div class="locks">${code.map((d,k)=>`<div class="lock ${k<t.solved?'on':''}">${k<t.solved?d:'🔒'}</div>`).join("")}</div>
+      <div class="row spread"><span>Bilik <b>${Math.min(t.solved+1,n)}</b>/${n}</span><span class="mono" data-time="${i}">${fmt(remaining(t))}</span></div>
+      <div class="small" style="margin:6px 0 10px">Salah ${t.wrong||0} · Petunjuk ${t.hints||0} · Penalti ${t.penalty||0}s${t.bonus?` · Bonus ${t.bonus}s`:""}</div>
+      <div class="row"><button class="sm" onclick="addTime(${i},60)">+1 min</button><button class="sm" onclick="addTime(${i},-60)">−1 min</button><button class="sm ghost" onclick="ask('Reset ${esc(t.name)}?','resetTeam(${i})')">Reset</button></div></div>`;}).join("")}</div>`;
+  } else if(tab==="quiz"){
+    body=`<div class="card" style="margin-top:16px"><h3 style="margin-top:0">Edit soalan (JSON)</h3>
+      <p class="small">Setiap bilik: <code>type</code> "mcq" (dengan <code>options</code>) atau "text" (jawapan boleh senarai; huruf besar/kecil tak kisah). <code>shuffleRooms</code>: setiap kumpulan dapat susunan soalan berbeza. Bilangan bilik bebas. <b>Simpan akan reset semua kumpulan.</b></p>
+      <textarea id="cfg">${esc(JSON.stringify(quiz(),null,2))}</textarea><div class="msg" id="msg"></div>
+      <div class="row"><button class="pri" onclick="saveQuiz()">Simpan & reset</button><button class="ghost" onclick="$('#cfg').value=JSON.stringify(DEFAULT_QUIZ,null,2)">Pulih soalan contoh</button></div></div>`;
+  } else body=boardHTML();
+  $("#app").innerHTML=`<header><div class="row"><span id="conn" class="dot${connected?" on":""}"></span><h1>🛡️ Admin</h1></div><button class="ghost sm" onclick="logout()">Log keluar</button></header>
+    <div class="tabs">${[["dash","📊 Dashboard"],["board","🏆 Papan"],["quiz","📝 Soalan"]].map(([k,l])=>`<button class="${tab===k?'on':''}" onclick="tab='${k}';maybeRender(true)">${l}</button>`).join("")}</div>${body}`;
+}
+function startAll(){ ROOT.child("game").set({state:"running",startAt:now()+3500,pausedTotal:0}); }
+function pauseAll(){ ROOT.child("game").update({state:"paused",pausedAt:now()}); }
+function resumeAll(){ const g=game(); ROOT.child("game").update({state:"running",pausedTotal:(g.pausedTotal||0)+(now()-g.pausedAt),pausedAt:null}); }
+function endAll(){ ROOT.child("game").update({state:"ended",endedAt:now()}); closeModal(); }
+function resetAll(){ ROOT.update({teams:makeTeams(),game:{state:"waiting"}}); closeModal(); }
+function resetTeam(i){ upd(i,makeTeams()[i]); closeModal(); }
+function addTime(i,s){ const t=teams()[i]; const o={bonus:(t.bonus||0)+s}; if(t.status==="timeout"&&remaining({...t,bonus:o.bonus,finishSec:null})>0){o.status="playing";o.finishSec=null;} upd(i,o); }
+function saveQuiz(){
+  const m=$("#msg");
+  try{
+    const c=JSON.parse($("#cfg").value);
+    if(!Array.isArray(c.rooms)||!c.rooms.length) throw "rooms mesti ada sekurang-kurangnya 1 soalan";
+    c.rooms.forEach((r,k)=>{ if(!r.q||r.answer==null) throw `Bilik ${k+1}: perlu q dan answer`;
+      if(r.type==="mcq"&&(!Array.isArray(r.options)||!r.options.map(norm).includes(norm(r.answer)))) throw `Bilik ${k+1}: answer mesti salah satu options`; });
+    c.timeLimitMin=+c.timeLimitMin||20; c.wrongPenaltySec=+c.wrongPenaltySec||0; c.hintPenaltySec=+c.hintPenaltySec||0;
+    D.quiz=c;
+    ROOT.update({quiz:c,teams:makeTeams(),game:{state:"waiting"}}).then(()=>{m.className="msg ok";m.textContent="✅ Disimpan. Semua kumpulan direset.";});
+  }catch(e){ m.className="msg bad"; m.textContent="❌ "+(e.message||e); }
+}
+
+/* ---------- Board ---------- */
+function boardHTML(){
+  return `<div class="card" style="margin-top:16px"><h2 style="margin:0">🏆 Papan Kedudukan</h2>
+  <table class="board"><tr><th>#</th><th>Kumpulan</th><th>Bilik</th><th>Masa</th><th>Status</th></tr>
+  ${rank().map((r,k)=>`<tr><td>${k+1}</td><td style="color:${color(r.i)};font-weight:800">${esc(r.t.name)}</td><td>${r.t.solved}/${rooms().length}</td><td class="mono" data-used="${r.i}">${fmt(teamTime(r.t))}</td><td>${badge(r.t)}</td></tr>`).join("")}
+  </table></div>`;
+}
+function board(){
+  $("#app").innerHTML=`<header><h1>🔐 ${esc(quiz().title)}</h1><div class="row"><div class="timer" data-gtime>${fmt(gameElapsed())}</div><button class="ghost sm" onclick="logout()">←</button></div></header>${boardHTML()}`;
+}
+
+/* ---------- Ticker: timers, countdown, timeout ---------- */
+setInterval(()=>{
+  const g=game();
+  document.querySelectorAll("[data-time]").forEach(el=>{const t=teams()[+el.dataset.time]; if(!t) return; const r=remaining(t); el.textContent=fmt(r); el.classList.toggle("low",r<60&&t.status==="playing"&&g.state==="running");});
+  document.querySelectorAll("[data-used]").forEach(el=>{const t=teams()[+el.dataset.used]; if(t) el.textContent=fmt(teamTime(t));});
+  document.querySelectorAll("[data-gtime]").forEach(el=>el.textContent=fmt(gameElapsed()));
+  // countdown / pause overlay
+  let ov="";
+  if(session&&g.state==="running"&&g.startAt&&now()<g.startAt) ov=`<div class="overlay"><div><div class="small">BERSEDIA…</div><div class="n">${Math.ceil((g.startAt-now())/1000)}</div></div></div>`;
+  else if(session&&session.role==="team"&&g.state==="paused") ov=`<div class="overlay"><div><p class="big">⏸</p><h2>Permainan dijeda oleh fasilitator</h2></div></div>`;
+  $("#ov").innerHTML=ov;
+  // timeout: team marks itself; admin marks everyone
+  if(session&&g.state==="running"){
+    const ids=session.role==="team"?[session.g]:session.role==="admin"?teams().map((_,i)=>i):[];
+    ids.forEach(i=>{const t=teams()[i]; if(t&&t.status==="playing"&&remaining(t)<=0) upd(i,{status:"timeout",finishSec:Math.round(teamTime(t))});});
+  }
+},250);
+
+/* ---------- Modal ---------- */
+function ask(text,action){ $("#modalBox").innerHTML=`<p style="margin-top:0">${text}</p><div class="row" style="justify-content:flex-end"><button class="ghost" onclick="closeModal()">Batal</button><button class="pri" onclick="${action}">Ya</button></div>`; $("#modal").classList.remove("hidden"); }
+function closeModal(){ $("#modal").classList.add("hidden"); }
+</script>
+</body>
+</html>
